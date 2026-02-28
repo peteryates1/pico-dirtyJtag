@@ -62,10 +62,10 @@
 
 #if ( BOARD_TYPE == BOARD_PICO )
 
-#define PIN_TDI 16 
-#define PIN_TDO 17
-#define PIN_TCK 18
-#define PIN_TMS 19
+#define PIN_TDI 4
+#define PIN_TDO 5
+#define PIN_TCK 2
+#define PIN_TMS 3
 #define PIN_RST 20
 #define PIN_TRST 21
 
@@ -74,13 +74,7 @@
 #define PIN_LED_ERROR  25
 #define PIN_LED_RX     25
 
-#define CDC_UART_INTF_COUNT 2
-#define PIN_UART0 uart0
-#define PIN_UART0_TX    12
-#define PIN_UART0_RX    13
-#define PIN_UART1 uart1
-#define PIN_UART1_TX    4
-#define PIN_UART1_RX    5
+#define CDC_UART_INTF_COUNT 0
 
 #elif ( BOARD_TYPE == BOARD_ADAFRUIT_ITSY )
 
