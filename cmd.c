@@ -51,7 +51,6 @@ enum CommandModifier
 {
   // CMD_XFER
   NO_READ = 0x80,
-  EXTEND_LENGTH = 0x40,
   // CMD_CLK
   READOUT = 0x80,
 };
@@ -94,7 +93,7 @@ static void cmd_freq(pio_jtag_inst_t* jtag, const uint8_t *commands);
  * @param usbd_dev USB device
  * @param commands Command data
  */
-static uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool extend_length, bool no_read, uint8_t* tx_buf);
+static uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool no_read, uint8_t* tx_buf);
 
 /**
  * @brief Handle CMD_SETSIG command
@@ -140,10 +139,13 @@ static void cmd_setvoltage(const uint8_t *commands);
  */
 static void cmd_gotobootloader(void);
 
-void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf) {
-  uint8_t *commands= (uint8_t*)rxbuf;
+uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf) {
+  uint8_t *commands = rxbuf;
+  uint8_t *end = rxbuf + count;
   uint8_t *output_buffer = tx_buf;
-  while ((commands < (rxbuf + count)) && (*commands != CMD_STOP))
+  bool incomplete = false;
+
+  while (!incomplete && (commands < end) && (*commands != CMD_STOP))
   {
     switch ((*commands)&0x0F) {
     case CMD_INFO:
@@ -153,19 +155,25 @@ void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* 
       break;
     }
     case CMD_FREQ:
+      if (commands + 3 > end) { incomplete = true; break; }
       cmd_freq(jtag, commands);
       commands += 2;
       break;
 
     case CMD_XFER:
     {
+      if (commands + 3 > end) { incomplete = true; break; }
+      uint16_t bit_count = (commands[1] << 8) | commands[2];
+      uint32_t data_bytes = (bit_count + 7) / 8;
+      if (commands + 3 + data_bytes > end) { incomplete = true; break; }
       bool no_read = *commands & NO_READ;
-      uint32_t trbytes = cmd_xfer(jtag, commands, *commands & EXTEND_LENGTH, no_read, output_buffer);
-      commands += 1 + trbytes;
+      uint32_t trbytes = cmd_xfer(jtag, commands, no_read, output_buffer);
+      commands += 2 + trbytes;
       output_buffer += (no_read ? 0 : trbytes);
       break;
     }
     case CMD_SETSIG:
+      if (commands + 3 > end) { incomplete = true; break; }
       cmd_setsig(jtag, commands);
       commands += 2;
       break;
@@ -178,6 +186,7 @@ void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* 
     }
     case CMD_CLK:
     {
+      if (commands + 3 > end) { incomplete = true; break; }
       uint32_t trbytes = cmd_clk(jtag, commands, !!(*commands & READOUT), output_buffer);
       output_buffer += trbytes;
       commands += 2;
@@ -191,25 +200,30 @@ void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* 
     case CMD_GOTOBOOTLOADER:
       cmd_gotobootloader();
       break;
-      
+
     default:
-      return; /* Unsupported command, halt */
+      incomplete = true; /* Unsupported command, halt */
       break;
     }
 
-    commands++;
+    if (!incomplete)
+      commands++;
   }
+
+  if (commands < end && *commands == CMD_STOP)
+    commands++;
+
   /* Send the transfer response back to host */
   if (tx_buf != output_buffer)
   {
     tud_vendor_write(tx_buf, output_buffer - tx_buf);
     tud_vendor_flush();
   }
-  return;
+  return commands - rxbuf;
 }
 
 static uint32_t cmd_info(uint8_t *buffer) {
-  char info_string[10] = "DJTAG2\n";
+  char info_string[10] = "DJTAG3\n";
   memcpy(buffer, info_string, 10);
   return 10;
 }
@@ -220,19 +234,10 @@ static void cmd_freq(pio_jtag_inst_t* jtag, const uint8_t *commands) {
 
 //static uint8_t output_buffer[64];
 
-static uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool extend_length, bool no_read, uint8_t* tx_buf) {
+static uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool no_read, uint8_t* tx_buf) {
   uint16_t transferred_bits;
   uint8_t* output_buffer = 0;
-  transferred_bits = commands[1];
-  if (extend_length)
-  {
-    transferred_bits += 256;
-  }
-  // Ensure we don't do over-read
-  if (transferred_bits > 62 * 8)
-  {
-    transferred_bits = 62 * 8;
-  }
+  transferred_bits = (commands[1] << 8) | commands[2];
 
   /* Fill the output buffer with zeroes */
   if (!no_read)
@@ -241,7 +246,7 @@ static uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool ex
     memset(output_buffer, 0, (transferred_bits + 7) / 8);
   }
 
-  jtag_transfer(jtag, transferred_bits, commands+2, output_buffer);
+  jtag_transfer(jtag, transferred_bits, commands + 3, output_buffer);
 
   return (transferred_bits + 7) / 8;
 }

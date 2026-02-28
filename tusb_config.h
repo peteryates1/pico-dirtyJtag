@@ -77,8 +77,8 @@
 #define CFG_TUD_CDC_TX_BUFSIZE    256
 #endif
 
-#define CFG_TUD_VENDOR_RX_BUFSIZE 128
-#define CFG_TUD_VENDOR_TX_BUFSIZE 64
+#define CFG_TUD_VENDOR_RX_BUFSIZE 1024
+#define CFG_TUD_VENDOR_TX_BUFSIZE 512
 
 #ifdef __cplusplus
  }
