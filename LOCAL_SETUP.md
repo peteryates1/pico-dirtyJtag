@@ -3,7 +3,7 @@
 Custom build of [pico-dirtyJtag](https://github.com/phdussud/pico-dirtyJtag) for
 programming FPGAs via [openFPGALoader](https://github.com/trabucayre/openFPGALoader).
 
-Turns a Raspberry Pi Pico into a USB JTAG adapter using the DirtyJTAG protocol.
+Turns a Raspberry Pi Pico (or Pico 2W) into a USB JTAG adapter using the DirtyJTAG protocol.
 
 ## Supported FPGAs
 
@@ -18,16 +18,47 @@ Full list: `openFPGALoader --list-fpga`
 
 ## Pin Assignments
 
-| Signal | GPIO | Pico Pin |
-|--------|------|----------|
-| TCK    | GP2  | 4        |
-| TMS    | GP3  | 5        |
-| TDI    | GP4  | 6        |
-| TDO    | GP5  | 7        |
-| GND    | —    | 3, 8     |
+| Signal   | GPIO      | FPGA Connector | Usage    |
+|----------|-----------|----------------|----------|
+| UART0 TX | GP0       | J3_IO7         | UART0 TX |
+| UART0 RX | GP1       | J3_IO8         | UART0 RX |
+| UART1 TX | GP4       | J2_IO42        | UART1 TX |
+| UART1 RX | GP5       | J2_IO41        | UART1 RX |
+| TDI      | GP16      | (JTAG direct)  | TDI      |
+| TDO      | GP17      | (JTAG direct)  | TDO      |
+| TCK      | GP18      | (JTAG direct)  | TCK      |
+| TMS      | GP19      | (JTAG direct)  | TMS      |
+| LED      | GP25      | RP2040_LED     |          |
 
-These match the pico-fpga JTAG pin assignments so the same wiring works for both
-firmwares.
+JTAG pins (GP16-19) connect directly to the FPGA JTAG chain, not through the
+I/O connectors. UART pins are routed through FPGA connector pins and require
+matching FPGA I/O to be configured on those pins.
+
+### Additional RP2040 GPIOs on FPGA connectors
+
+| GPIO      | FPGA Connector |
+|-----------|----------------|
+| GP2       | J2_IO44        |
+| GP3       | J2_IO43        |
+| GP6       | J2_IO40        |
+| GP7       | J2_IO39        |
+| GP8       | J2_IO38        |
+| GP9       | J2_IO37        |
+| GP10      | J2_IO36        |
+| GP11      | J2_IO35        |
+| GP12      | J2_IO34        |
+| GP13      | J2_IO33        |
+| GP14      | J2_IO32        |
+| GP15      | J2_IO31        |
+| GP20      | J2_IO30        |
+| GP21      | J2_IO29        |
+| GP22      | J2_IO28        |
+| GP23      | J2_IO27        |
+| GP24      | RP2040_KEY     |
+| GP26_ADC0 | J2_IO26        |
+| GP27_ADC1 | J2_IO25        |
+| GP28_ADC2 | J2_IO16        |
+| GP29_ADC3 | J2_IO15        |
 
 RST (GP20) and TRST (GP21) are configured but optional — most boards only need
 the four JTAG signals plus GND.
@@ -39,14 +70,24 @@ Two changes from upstream for compatibility with Pico SDK 2.2.0 and our wiring:
 1. **Multicore disabled** — `#define MULTICORE` commented out in `dirtyJtag.c`.
    The multicore USB handling causes bulk read timeouts with SDK 2.2.0.
 2. **Custom pins + no CDC UART** — in `dirtyJtagConfig.h` under `BOARD_PICO`:
-   TCK=GP2, TMS=GP3, TDI=GP4, TDO=GP5, `CDC_UART_INTF_COUNT 0`.
+   TMS=GP16, TDI=GP17, TDO=GP18, TCK=GP19, `CDC_UART_INTF_COUNT 1` with UART0 on GP0 (TX) / GP1 (RX).
 
 ## Build
 
 Requires Pico SDK 2.2.0 (`~/pico-sdk`).
 
+For **Pico 2W** (RP2350):
 ```bash
 cd ~/pico-dirtyJtag/build
+rm -rf *
+PICO_SDK_PATH=~/pico-sdk cmake -DPICO_BOARD=pico2_w ..
+make -j$(nproc)
+```
+
+For **original Pico** (RP2040):
+```bash
+cd ~/pico-dirtyJtag/build
+rm -rf *
 PICO_SDK_PATH=~/pico-sdk cmake ..
 make -j$(nproc)
 ```
@@ -55,14 +96,20 @@ Output: `build/dirtyJtag.elf` and `build/dirtyJtag.uf2`
 
 ## Flash to Pico
 
-Via SWD debug probe:
+Via SWD debug probe (requires Raspberry Pi's OpenOCD fork for RP2350 —
+installed at `/usr/local/bin/openocd` from `~/raspberrypi-openocd`):
 
 ```bash
+# Pico 2W (RP2350)
+sudo /usr/local/bin/openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg \
+  -c "adapter speed 5000; program ~/pico-dirtyJtag/build/dirtyJtag.elf verify reset exit"
+
+# Original Pico (RP2040) — system openocd works
 sudo openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
   -c "adapter speed 5000; program ~/pico-dirtyJtag/build/dirtyJtag.elf verify reset exit"
 ```
 
-Or via UF2: hold BOOTSEL, connect USB, copy `dirtyJtag.uf2` to the RPI-RP2 drive.
+Or via UF2: hold BOOTSEL, connect USB, copy `dirtyJtag.uf2` to the mounted drive.
 
 The Pico enumerates as USB device `1209:c0ca` ("DirtyJTAG").
 
@@ -121,12 +168,12 @@ The same Pico and wiring supports both pico-dirtyJtag (for openFPGALoader FPGA
 programming) and pico-fpga (for logic analyzer, UART bridge, JTAG scripting).
 
 ```bash
-# Switch to dirtyJtag (FPGA programming)
-sudo openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
+# Switch to dirtyJtag (FPGA programming) — Pico 2W
+sudo /usr/local/bin/openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg \
   -c "adapter speed 5000; program ~/pico-dirtyJtag/build/dirtyJtag.elf verify reset exit"
 
-# Switch to pico-fpga (LA / UART / JTAG tool)
-sudo openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
+# Switch to pico-fpga (LA / UART / JTAG tool) — Pico 2W
+sudo /usr/local/bin/openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg \
   -c "adapter speed 5000; program ~/pico-fpga/build/pico_fpga.elf verify reset exit"
 ```
 
