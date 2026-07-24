@@ -63,14 +63,32 @@ matching FPGA I/O to be configured on those pins.
 RST (GP20) and TRST (GP21) are configured but optional — most boards only need
 the four JTAG signals plus GND.
 
+## USB Interfaces
+
+The firmware exposes three USB interfaces:
+
+| Device      | Interface     | Purpose                                 |
+|-------------|---------------|-----------------------------------------|
+| (vendor)    | JTAG vendor   | openFPGALoader JTAG (not a ttyACM)      |
+| `/dev/ttyACM0` | CDC 0 (UART0) | UART bridge: GP0 (TX) / GP1 (RX)    |
+| `/dev/ttyACM1` | CDC 1         | GPIO control: write `'1'`/`'0'` to toggle GP2 |
+
+`ttyACM0` bridges UART0 to the FPGA pins U14/V14 (J12 header). In the dual-cluster
+bitstream (`JopDualWukongTop`), the SDR cluster UART is routed to these pins, so the
+SDR cluster output appears on `ttyACM0` without needing the CH340N adapter.
+
+The baud rate is reconfigured by the host's serial port settings (via CDC line-coding).
+
 ## Local Modifications
 
-Two changes from upstream for compatibility with Pico SDK 2.2.0 and our wiring:
+Three changes from upstream for compatibility with Pico SDK 2.2.0 and our wiring:
 
 1. **Multicore disabled** — `#define MULTICORE` commented out in `dirtyJtag.c`.
    The multicore USB handling causes bulk read timeouts with SDK 2.2.0.
-2. **Custom pins + no CDC UART** — in `dirtyJtagConfig.h` under `BOARD_PICO`:
-   TMS=GP16, TDI=GP17, TDO=GP18, TCK=GP19, `CDC_UART_INTF_COUNT 1` with UART0 on GP0 (TX) / GP1 (RX).
+2. **Custom JTAG pins** — in `dirtyJtagConfig.h` under `BOARD_PICO`:
+   TDI=GP16, TDO=GP17, TCK=GP18, TMS=GP19 (JTAG on GP16-19).
+3. **Dual CDC interfaces** — `CDC_UART_INTF_COUNT 2`: UART0 on GP0/GP1 bridged as
+   ttyACM0; ttyACM1 used for GPIO control (GP2 UART-MUX select, no UART backing).
 
 ## Build
 

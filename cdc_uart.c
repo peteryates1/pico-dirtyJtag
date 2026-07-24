@@ -192,6 +192,7 @@ void cdc_uart_task(void)
 	for (size_t i = 0; i < CDC_UART_INTF_COUNT; i++)
 	{
 		uart = &uart_devices[i];
+		if (uart->inst == NULL) continue;
 		if (uart->cdc_stopped)
 			return;
 		if (tud_cdc_n_connected(i))
@@ -261,6 +262,7 @@ void tud_cdc_line_coding_cb(uint8_t itf, cdc_line_coding_t const* line_coding)
 	for (size_t i = 0; i < CDC_UART_INTF_COUNT; i++)
 	{
 		uart = &uart_devices[i];
+		if (uart->inst == NULL) continue;
 		if (i == itf)
 		{
 			uart->cdc_stopped = true;
@@ -326,6 +328,7 @@ void tud_cdc_line_state_cb(uint8_t itf, bool dtr, bool rts)
 	for (size_t i = 0; i < CDC_UART_INTF_COUNT; i++)
 	{
 		struct uart_device *uart = &uart_devices[i];
+		if (uart->inst == NULL) continue;
 		if (i == itf)
 		{
 			/* CDC drivers use linestate as a bodge to activate/deactivate the interface.
