@@ -41,6 +41,7 @@
 #define BOARD_QMTECH_RP2040_DAUGHTERBOARD 3
 #define BOARD_WERKZEUG       4
 #define BOARD_RP2040_ZERO    5
+#define BOARD_PICO2_W        6
 
 // Select the board type from the above
 #define BOARD_TYPE BOARD_PICO
@@ -187,6 +188,30 @@
 #define PIN_UART1_TX    8
 #define PIN_UART1_RX    9
 
+
+#elif ( BOARD_TYPE == BOARD_PICO2_W )
+
+// Pico 2W (RP2350W) — same pin mapping as Pico, but LED is on CYW43 WL_GPIO0
+// (not a regular GPIO), so LED pins disabled.
+#define PIN_TDI 16
+#define PIN_TDO 17
+#define PIN_TCK 18
+#define PIN_TMS 19
+#define PIN_RST 20
+#define PIN_TRST 21
+
+#define LED_INVERTED   0
+#define PIN_LED_TX     -1
+#define PIN_LED_ERROR  -1
+#define PIN_LED_RX     -1
+
+#define CDC_UART_INTF_COUNT 2
+#define PIN_UART0       uart0
+#define PIN_UART0_TX    0
+#define PIN_UART0_RX    1
+#define PIN_UART1       uart1
+#define PIN_UART1_TX    4
+#define PIN_UART1_RX    5
 
 #endif // BOARD_TYPE
 

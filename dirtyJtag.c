@@ -43,6 +43,11 @@
 
 #include "dirtyJtagConfig.h"
 
+/* GP2 as UART MUX select output for FPGA dual-cluster routing.
+ * Directly controllable from host: write '1' or '0' to CDC1 (ttyACM1).
+ * Default: low (sel=0). */
+#define PIN_UART_SEL 2
+
 void init_pins()
 {
     bi_decl(bi_4pins_with_names(PIN_TCK, "TCK", PIN_TDI, "TDI", PIN_TDO, "TDO", PIN_TMS, "TMS"));
@@ -129,13 +134,24 @@ int main()
 #if ( CDC_UART_INTF_COUNT > 0 )
     cdc_uart_init( 0, PIN_UART0, PIN_UART0_RX, PIN_UART0_TX );
 #endif
-#if ( CDC_UART_INTF_COUNT > 1)
-    cdc_uart_init( 1, PIN_UART1, PIN_UART1_RX, PIN_UART1_TX );
-#endif
+    /* UART1 NOT initialized as CDC bridge — GP4/GP5 are wired to FPGA J12.
+     * CDC1 (ttyACM1) is used purely for GPIO control commands. */
 
+    /* Init GP2 as UART MUX select output (active high = swap UART routing) */
+    gpio_init(PIN_UART_SEL);
+    gpio_set_dir(PIN_UART_SEL, GPIO_OUT);
+    gpio_put(PIN_UART_SEL, 0);
 
     djtag_init();
     while (1) {
+        /* Check CDC1 for GPIO control BEFORE jtag_main_task consumes it */
+        if (tud_cdc_n_available(1)) {
+            uint8_t ch;
+            if (tud_cdc_n_read(1, &ch, 1) == 1) {
+                if (ch == '1') gpio_put(PIN_UART_SEL, 1);
+                else if (ch == '0') gpio_put(PIN_UART_SEL, 0);
+            }
+        }
         jtag_main_task();
     }
 }

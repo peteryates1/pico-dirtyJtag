@@ -268,10 +268,12 @@ void tud_cdc_line_coding_cb(uint8_t itf, cdc_line_coding_t const* line_coding)
 			uart->cdc_stopped = true;
 			uart_parity_t parity;
 			uint data_bits, stop_bits;
-			uart_deinit(uart->inst);
 			tud_cdc_n_write_clear(itf);
 			tud_cdc_n_read_flush(itf);
-			uart_init(uart->inst, line_coding->bit_rate);
+			/* Use uart_set_baudrate instead of uart_deinit+uart_init.
+			 * uart_init resets the UART peripheral and clears DMACR,
+			 * disabling DMA TX/RX and breaking the host→FPGA path. */
+			uart_set_baudrate(uart->inst, line_coding->bit_rate);
 			switch (line_coding->parity)
 			{
 			case CDC_LINE_CODING_PARITY_ODD:
