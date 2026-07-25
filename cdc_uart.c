@@ -199,25 +199,32 @@ void cdc_uart_task(void)
 		if (tud_cdc_n_connected(i))
 		{
 			uart->is_connected = 1;
-			int written = 0;
+			// Forward every byte the RX DMA has deposited straight to the USB
+			// CDC host, splitting each linear write at the ring wrap. The old
+			// code batched with a FULL_SWO_PACKET / n_checks>4 heuristic (from
+			// the SWO trace use case); for a UART bridge that could leave the
+			// tail of a small burst — e.g. the 4-byte download checksum, or the
+			// last char of a line — unforwarded, causing intermittent
+			// FPGA->host byte loss. Forward immediately instead.
 			volatile uint8_t *wa = (uint8_t*)(dma_channel_hw_addr(uart->rx_dma_channel)->write_addr);
 			if (wa == &uart->rx_buf[RX_BUFFER_SIZE])
-			{
 				wa = &uart->rx_buf[0];
-			}
-			uint32_t rx_used_space = (wa >= uart->rx_read_address) ? (wa - uart->rx_read_address) : (wa + RX_BUFFER_SIZE - uart->rx_read_address);
-			uart->n_checks++;
-			if ((rx_used_space >= FULL_SWO_PACKET) || ((rx_used_space != 0) && (uart->n_checks > 4)))
+			if (wa != uart->rx_read_address)
 			{
 				led_tx(1);
-				uart->n_checks = 0;
 				uint32_t capacity = tud_cdc_n_write_available(i);
-				uint32_t size_out = MIN(rx_used_space, capacity);
-				if (capacity >= FULL_SWO_PACKET)
+				if (capacity > 0)
 				{
+					// Contiguous run: up to wa, or up to the buffer end on wrap.
+					// tud_cdc_n_write reads linearly, so never let one write
+					// span the wrap (it would read past rx_buf[] end). The
+					// wrapped remainder is sent on the next task pass.
+					uint32_t contig = (wa > uart->rx_read_address)
+						? (uint32_t)(wa - uart->rx_read_address)
+						: (uint32_t)(&uart->rx_buf[RX_BUFFER_SIZE] - uart->rx_read_address);
+					uint32_t size_out = MIN(contig, capacity);
 					uint32_t written = tud_cdc_n_write(i, uart->rx_read_address, size_out);
-					if (rx_used_space < FULL_SWO_PACKET)
-						tud_cdc_n_write_flush(i);
+					tud_cdc_n_write_flush(i);
 					tud_task();
 					uart->rx_read_address += written;
 					if (uart->rx_read_address >= &uart->rx_buf[RX_BUFFER_SIZE])
