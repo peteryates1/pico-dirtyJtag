@@ -81,7 +81,7 @@ The baud rate is reconfigured by the host's serial port settings (via CDC line-c
 
 ## Local Modifications
 
-Three changes from upstream for compatibility with Pico SDK 2.2.0 and our wiring:
+Changes from upstream for compatibility with Pico SDK 2.2.0 and our wiring:
 
 1. **Multicore disabled** — `#define MULTICORE` commented out in `dirtyJtag.c`.
    The multicore USB handling causes bulk read timeouts with SDK 2.2.0.
@@ -89,6 +89,18 @@ Three changes from upstream for compatibility with Pico SDK 2.2.0 and our wiring
    TDI=GP16, TDO=GP17, TCK=GP18, TMS=GP19 (JTAG on GP16-19).
 3. **Dual CDC interfaces** — `CDC_UART_INTF_COUNT 2`: UART0 on GP0/GP1 bridged as
    ttyACM0; ttyACM1 used for GPIO control (GP2 UART-MUX select, no UART backing).
+4. **CDC↔UART bridge reliability fixes** in `cdc_uart.c` — the UART bridge is used
+   for JOP serial download/console, which streams with no per-byte handshake, so a
+   single lost byte hangs the transfer. Two upstream bugs dropped bytes:
+   - `dma_handler` processed uninitialised `uart_devices[]` entries, corrupting the
+     TX DMA write address so nothing transmitted — added a NULL guard (`488f86f`).
+   - RX→USB forwarding batched with a `FULL_SWO_PACKET`/`n_checks>4` heuristic (from
+     the SWO-trace use case) and left the tail of small bursts unforwarded (the
+     4-byte download checksum came back short; console output lost characters).
+     Now forwards immediately and clamps each `tud_cdc_n_write` to the contiguous
+     span before the ring wrap (`36809d0`). Result: lossless JOP download at full
+     2 Mbaud, no host throttling. Lowering the FPGA baud is not a fix — it just
+     moves the loss to the host→FPGA direction.
 
 ## Build
 
