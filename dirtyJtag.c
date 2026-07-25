@@ -134,8 +134,6 @@ int main()
 #if ( CDC_UART_INTF_COUNT > 0 )
     cdc_uart_init( 0, PIN_UART0, PIN_UART0_RX, PIN_UART0_TX );
 #endif
-    /* UART1 NOT initialized as CDC bridge — GP4/GP5 are wired to FPGA J12.
-     * CDC1 (ttyACM1) is used purely for GPIO control commands. */
 
     /* Init GP2 as UART MUX select output (active high = swap UART routing) */
     gpio_init(PIN_UART_SEL);

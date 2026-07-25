@@ -166,7 +166,8 @@ static void dma_handler()
 	for (size_t i = 0; i < CDC_UART_INTF_COUNT; i++)
 	{
 		uart = &uart_devices[i];
-		
+		if (uart->inst == NULL) continue;
+
 		if (dma_channel_get_irq1_status(uart->rx_dma_channel))
 		{
 			dma_channel_set_write_addr(uart->rx_dma_channel, &uart->rx_buf[0], true);
