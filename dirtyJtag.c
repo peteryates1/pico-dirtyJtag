@@ -134,22 +134,32 @@ int main()
 #if ( CDC_UART_INTF_COUNT > 0 )
     cdc_uart_init( 0, PIN_UART0, PIN_UART0_RX, PIN_UART0_TX );
 #endif
+#if ( CDC_UART_INTF_COUNT > 1 )
+    /* uart1 was declared but never initialised. CDC_UART_INTF_COUNT 2 creates
+       the second USB CDC interface, so the host enumerates a second ttyACM and
+       opens it happily -- but without this call gpio4/5 never get
+       GPIO_FUNC_UART, uart1 is never uart_init'ed and no DMA is set up, so the
+       port is connected to nothing. It presents as total silence on a port that
+       looks present and healthy, which is indistinguishable from bad wiring or
+       a dead FPGA design; it cost a loopback jig looping four pin pairs to rule
+       those out. Everything else already supports two: uart_devices[2] is sized
+       for it and every service loop runs to CDC_UART_INTF_COUNT. */
+    cdc_uart_init( 1, PIN_UART1, PIN_UART1_RX, PIN_UART1_TX );
+#endif
 
-    /* Init GP2 as UART MUX select output (active high = swap UART routing) */
-    gpio_init(PIN_UART_SEL);
-    gpio_set_dir(PIN_UART_SEL, GPIO_OUT);
-    gpio_put(PIN_UART_SEL, 0);
+    /* UART MUX select REMOVED. It claimed GP2 as a GPIO output, but GP2 is JTAG
+       TMS in this board config and djtag_init() below hands GP2 to the PIO
+       immediately afterwards -- so the gpio_put calls never reached a pin. Its
+       only surviving effect was harmful: the control channel stole every byte
+       written to CDC1 (see the loop below), so the second UART could not work
+       even once it was initialised. */
 
     djtag_init();
     while (1) {
-        /* Check CDC1 for GPIO control BEFORE jtag_main_task consumes it */
-        if (tud_cdc_n_available(1)) {
-            uint8_t ch;
-            if (tud_cdc_n_read(1, &ch, 1) == 1) {
-                if (ch == '1') gpio_put(PIN_UART_SEL, 1);
-                else if (ch == '0') gpio_put(PIN_UART_SEL, 0);
-            }
-        }
+        /* CDC1 is a UART bridge, not a control channel. Reading it here consumed
+           the host's bytes before cdc_uart_task could forward them to uart1,
+           which made ttyACM2 look permanently dead: the port enumerated, opened
+           cleanly and swallowed everything. */
         jtag_main_task();
     }
 }

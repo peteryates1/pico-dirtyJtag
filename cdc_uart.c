@@ -194,8 +194,14 @@ void cdc_uart_task(void)
 	{
 		uart = &uart_devices[i];
 		if (uart->inst == NULL) continue;
+		/* CONTINUE, not return. cdc_stopped is set whenever DTR is deasserted,
+		   i.e. whenever the host does not have that port open -- so a `return`
+		   here meant that an unopened ttyACM0 silently starved every higher
+		   interface. The second UART could then only work while the first was
+		   also open, which looks exactly like dead hardware when ports are
+		   tested one at a time. */
 		if (uart->cdc_stopped)
-			return;
+			continue;
 		if (tud_cdc_n_connected(i))
 		{
 			uart->is_connected = 1;
