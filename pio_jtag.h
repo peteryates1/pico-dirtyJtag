@@ -62,10 +62,12 @@ static inline void jtag_set_tms(const pio_jtag_inst_t *jtag, bool value)
 static inline void jtag_set_rst(const pio_jtag_inst_t *jtag, bool value)
 {
     /* Change the direction to out to drive pin to 0 or to in to emulate open drain */
+    if (jtag->pin_rst >= NUM_BANK0_GPIOS) return;   // board has no RST pin
     gpio_set_dir(jtag->pin_rst, !value);
 }
 static inline void jtag_set_trst(const pio_jtag_inst_t *jtag, bool value)
 {
+    if (jtag->pin_trst >= NUM_BANK0_GPIOS) return;  // board has no TRST pin
     gpio_put(jtag->pin_trst, value);
 }
 

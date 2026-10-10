@@ -42,9 +42,13 @@
 #define BOARD_WERKZEUG       4
 #define BOARD_RP2040_ZERO    5
 #define BOARD_PICO2_W        6
+#define BOARD_COLORLIGHT_DB  7
 
-// Select the board type from the above
+// Select the board type from the above. Overridable from cmake:
+//   cmake -DDJ_BOARD_TYPE=BOARD_COLORLIGHT_DB ..
+#ifndef BOARD_TYPE
 #define BOARD_TYPE BOARD_PICO2_W
+#endif
 //#define BOARD_TYPE BOARD_PICO
 //#define BOARD_TYPE BOARD_ADAFRUIT_ITSY
 //#define BOARD_TYPE BOARD_SPOKE_RP2040
@@ -215,6 +219,34 @@
 #define PIN_UART1       uart1
 #define PIN_UART1_TX    4    // GP4/5 = uart1 (clear of JTAG GP0-3)
 #define PIN_UART1_RX    5
+
+#elif ( BOARD_TYPE == BOARD_COLORLIGHT_DB )
+
+// RP2040-STAMP on the fpga-db-colorlight-i5 base board (netlist 2026-10-10),
+// carrying a Colorlight i5/i9/i9+ module. JTAG is routed on the board:
+// GPIO0..3 = TCK/TMS/TDI/TDO -> J2 + the module's JTAG pads. Every other
+// RP2040 GPIO used here goes straight to an FPGA ball, so RST/TRST are NOT
+// defined (never drive a pin the FPGA may also drive).
+// The stamp's only LED is a WS2812 on GPIO21 -> LEDs disabled.
+#define PIN_TCK 0
+#define PIN_TMS 1
+#define PIN_TDI 2
+#define PIN_TDO 3
+
+#define LED_INVERTED   0
+#define PIN_LED_TX     -1
+#define PIN_LED_ERROR  -1
+#define PIN_LED_RX     -1
+
+// CDC0 = uart1 on GPIO4 (TX, FPGA Y21) / GPIO5 (RX, FPGA AB21)
+// CDC1 = uart0 on GPIO16 (TX, FPGA P14) / GPIO17 (RX, FPGA R14)
+#define CDC_UART_INTF_COUNT 2
+#define PIN_UART0       uart1
+#define PIN_UART0_TX    4
+#define PIN_UART0_RX    5
+#define PIN_UART1       uart0
+#define PIN_UART1_TX    16
+#define PIN_UART1_RX    17
 
 #endif // BOARD_TYPE
 

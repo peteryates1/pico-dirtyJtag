@@ -74,6 +74,12 @@ add_executable(dirtyJtag
 )
 
 target_include_directories(dirtyJtag PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Board pin map (dirtyJtagConfig.h); empty = the header's default
+set(DJ_BOARD_TYPE "" CACHE STRING "dirtyJtagConfig.h board, e.g. BOARD_COLORLIGHT_DB")
+if(DJ_BOARD_TYPE)
+    target_compile_definitions(dirtyJtag PRIVATE BOARD_TYPE=${DJ_BOARD_TYPE})
+endif()
 #target_compile_definitions(dirtyJtag PRIVATE SYS_CLK_MHZ=200)
 
 pico_generate_pio_header(dirtyJtag ${CMAKE_CURRENT_LIST_DIR}/jtag.pio)

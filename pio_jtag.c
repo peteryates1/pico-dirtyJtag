@@ -267,7 +267,7 @@ uint8_t __time_critical_func(pio_jtag_write_tms_blocking)(const pio_jtag_inst_t 
 
 static void init_pins(uint pin_tck, uint pin_tdi, uint pin_tdo, uint pin_tms, uint pin_rst, uint pin_trst)
 {
-    #if !( BOARD_TYPE == BOARD_QMTECH_RP2040_DAUGHTERBOARD )
+    #ifdef PIN_RST
     // emulate open drain with pull up and direction
     gpio_pull_up(pin_rst);
     gpio_clr_mask((1u << pin_tms) | (1u << pin_rst) | (1u << pin_trst));
@@ -290,10 +290,10 @@ void init_jtag(pio_jtag_inst_t* jtag, uint freq, uint pin_tck, uint pin_tdi, uin
     jtag->pin_tdo = pin_tdo;
     jtag->pin_tck = pin_tck;
     jtag->pin_tms = pin_tms;
-    #if !( BOARD_TYPE == BOARD_QMTECH_RP2040_DAUGHTERBOARD )
+    // 255 when the board has none: the setters then do nothing. Left unset
+    // they were 0, so a host SETSIG(SRST) re-pointed GPIO0 -- TCK on some boards.
     jtag->pin_rst = pin_rst;
     jtag->pin_trst = pin_trst;
-    #endif
     uint16_t clkdiv = 31;  // around 1 MHz @ 125MHz clk_sys
     pio_jtag_init(jtag->pio, jtag->sm,
                     clkdiv,
