@@ -84,6 +84,10 @@ make
 
 If everything succeeds you should have a `dirtyJtag.uf2` file that you can directly upload to the Pi Pico.
 
+In this fork the default board is the Pico 2 W. A build directory keeps the board it was first
+configured for, so use one directory per board: [LOCAL_SETUP.md](LOCAL_SETUP.md) has each board's
+`cmake` line and how to flash it.
+
 ## JTAG Usage
 
 Once the board is running `pico-dirtyJtag` and connected to your host you will see a new USB device

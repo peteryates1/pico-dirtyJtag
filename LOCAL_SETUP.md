@@ -3,7 +3,8 @@
 Custom build of [pico-dirtyJtag](https://github.com/phdussud/pico-dirtyJtag) for
 programming FPGAs via [openFPGALoader](https://github.com/trabucayre/openFPGALoader).
 
-Turns a Raspberry Pi Pico (or Pico 2W) into a USB JTAG adapter using the DirtyJTAG protocol.
+Turns a Raspberry Pi Pico 2 W (the default build), a Pico or an RP2040-STAMP into
+a USB JTAG adapter using the DirtyJTAG protocol, with two USB-UART bridges.
 
 ## Supported FPGAs
 
@@ -16,7 +17,44 @@ Any FPGA supported by openFPGALoader, including:
 
 Full list: `openFPGALoader --list-fpga`
 
+## Boards
+
+The pin map (`DJ_BOARD_TYPE`, a block in `dirtyJtagConfig.h`) and the SDK board
+(`PICO_BOARD`) are chosen separately; both default to the Pico 2 W. The two pin
+maps we added refuse to compile for the wrong chip, with an `#error` naming the
+fix.
+
+| Board        | `DJ_BOARD_TYPE`           | `PICO_BOARD`               | Build directory    | Wired to                            |
+|--------------|---------------------------|----------------------------|--------------------|-------------------------------------|
+| Pico 2 W     | `BOARD_PICO2_W` (default) | `pico2_w` (default)        | `build-pico2w`     | QMTECH Wukong (XC7A100T) JTAG header |
+| RP2040-STAMP | `BOARD_COLORLIGHT_DB`     | `solderparty_rp2040_stamp` | `build-colorlight` | Colorlight i5 base board            |
+| Pico         | `BOARD_PICO`              | `pico`                     | `build`            | QMTECH RP2040 daughterboard         |
+
 ## Pin Assignments
+
+### Pico 2 W on the Wukong (`BOARD_PICO2_W`)
+
+| Signal        | GPIO        | Notes                     |
+|---------------|-------------|---------------------------|
+| TCK           | GP0         |                           |
+| TDO           | GP1         |                           |
+| TDI           | GP2         |                           |
+| TMS           | GP3         |                           |
+| UART0 TX / RX | GP12 / GP13 | first ttyACM, Wukong J11  |
+| UART1 TX / RX | GP4 / GP5   | second ttyACM, Wukong J11 |
+
+RST/TRST are on GP20/21, unconnected. The Pico 2 W's LED is on the CYW43
+(WL_GPIO0), so the LED pins are disabled. The JOP repo's
+`fpga/scripts/usb_serial_map` (`wukong-pico-0`, `wukong-pico-1`) records the J11
+pins.
+
+### RP2040-STAMP on the Colorlight base board (`BOARD_COLORLIGHT_DB`)
+
+JTAG is routed on the board: GPIO0-3 = TCK, TMS, TDI, TDO. The first ttyACM is
+uart1 on GPIO4 (TX) / GPIO5 (RX), the second is uart0 on GPIO16 (TX) / GPIO17
+(RX). RST/TRST are not defined: every other GPIO goes straight to an FPGA ball.
+
+### Pico on the QMTECH RP2040 daughterboard (`BOARD_PICO`)
 
 | Signal   | GPIO      | FPGA Connector | Usage    |
 |----------|-----------|----------------|----------|
@@ -34,7 +72,7 @@ JTAG pins (GP16-19) connect directly to the FPGA JTAG chain, not through the
 I/O connectors. UART pins are routed through FPGA connector pins and require
 matching FPGA I/O to be configured on those pins.
 
-### Additional RP2040 GPIOs on FPGA connectors
+#### Additional RP2040 GPIOs on FPGA connectors
 
 | GPIO      | FPGA Connector |
 |-----------|----------------|
@@ -65,30 +103,39 @@ the four JTAG signals plus GND.
 
 ## USB Interfaces
 
-The firmware exposes three USB interfaces:
+The adapter enumerates as `1209:c0ca` (product "Pico Dirty JTAG"); its serial
+number is the chip's unique ID.
 
-| Device      | Interface     | Purpose                                 |
-|-------------|---------------|-----------------------------------------|
-| (vendor)    | JTAG vendor   | openFPGALoader JTAG (not a ttyACM)      |
-| `/dev/ttyACM0` | CDC 0 (UART0) | UART bridge: GP0 (TX) / GP1 (RX)    |
-| `/dev/ttyACM1` | CDC 1         | GPIO control: write `'1'`/`'0'` to toggle GP2 |
+| Interface      | Purpose                                                |
+|----------------|--------------------------------------------------------|
+| vendor (bulk)  | JTAG for openFPGALoader (`-c dirtyJtag`), not a ttyACM |
+| CDC 0 (`if01`) | UART bridge on the board's first UART (see above)      |
+| CDC 1 (`if03`) | UART bridge on the second UART                         |
 
-`ttyACM0` bridges UART0 to the FPGA pins U14/V14 (J12 header). In the dual-cluster
-bitstream (`JopDualWukongTop`), the SDR cluster UART is routed to these pins, so the
-SDR cluster output appears on `ttyACM0` without needing the CH340N adapter.
+ttyACM numbers change between plugs: open
+`/dev/serial/by-id/usb-Jean_THOMAS_Pico_Dirty_JTAG_<serial>-if01` (or `-if03`).
+The baud rate follows the host's serial port settings (CDC line coding).
 
-The baud rate is reconfigured by the host's serial port settings (via CDC line-coding).
+On the Wukong, single-system JOP builds use the board's own CH340N console.
+Builds generated with `uart=PICO_UART0` use CDC 0, and the dual-cluster build
+(`JopDualWukongTop`) uses both: the SDR cluster on CDC 0, the DDR3 cluster on
+CDC 1.
 
 ## Local Modifications
 
 Changes from upstream for compatibility with Pico SDK 2.2.0 and our wiring:
 
-1. **Multicore disabled** — `#define MULTICORE` commented out in `dirtyJtag.c`.
-   The multicore USB handling causes bulk read timeouts with SDK 2.2.0.
-2. **Custom JTAG pins** — in `dirtyJtagConfig.h` under `BOARD_PICO`:
-   TDI=GP16, TDO=GP17, TCK=GP18, TMS=GP19 (JTAG on GP16-19).
-3. **Dual CDC interfaces** — `CDC_UART_INTF_COUNT 2`: UART0 on GP0/GP1 bridged as
-   ttyACM0; ttyACM1 used for GPIO control (GP2 UART-MUX select, no UART backing).
+1. **Single core** — upstream's `MULTICORE` USB handling caused bulk read
+   timeouts with SDK 2.2.0. It was switched off in `ade97b0` and removed in the
+   DJTAG3 rewrite (`2c793fd`, up to 4000 bits per transfer, ~394 KB/s vs
+   ~300 KB/s).
+2. **Board pin maps** in `dirtyJtagConfig.h` (see Boards): `BOARD_PICO2_W` (the
+   default) and `BOARD_COLORLIGHT_DB` added, `BOARD_PICO` changed to the QMTECH
+   daughterboard's GP16-19. The two we added check their chip
+   (`check_board_config.sh`).
+3. **Two CDC UARTs** — `CDC_UART_INTF_COUNT 2`. The second only works since
+   `b1241f3`: until then just the first UART was initialised, a dead UART-MUX
+   select feature swallowed CDC 1's bytes, and a closed port starved the others.
 4. **CDC↔UART bridge reliability fixes** in `cdc_uart.c` — the UART bridge is used
    for JOP serial download/console, which streams with no per-byte handshake, so a
    single lost byte hangs the transfer. Two upstream bugs dropped bytes:
@@ -101,53 +148,86 @@ Changes from upstream for compatibility with Pico SDK 2.2.0 and our wiring:
      span before the ring wrap (`36809d0`). Result: lossless JOP download at full
      2 Mbaud, no host throttling. Lowering the FPGA baud is not a fix — it just
      moves the loss to the host→FPGA direction.
+5. **The UF2 is a make target** (`CMakeLists.txt`). The SDK makes it only as a
+   post-link step, so a UF2 missing beside an up-to-date ELF was never made again
+   (2026-10-23). `make` now remakes a missing or stale one (`check_uf2_rule.sh`).
 
 ## Build
 
-Requires Pico SDK 2.2.0 (`~/pico-sdk`).
-
-For **Pico 2W** (RP2350):
-```bash
-cd ~/pico-dirtyJtag/build
-rm -rf *
-PICO_SDK_PATH=~/pico-sdk cmake -DPICO_BOARD=pico2_w ..
-make -j$(nproc)
-```
-
-For **original Pico** (RP2040):
-```bash
-cd ~/pico-dirtyJtag/build
-rm -rf *
-PICO_SDK_PATH=~/pico-sdk cmake ..
-make -j$(nproc)
-```
-
-Output: `build/dirtyJtag.elf` and `build/dirtyJtag.uf2`
-
-## Flash to Pico
-
-Via SWD debug probe (requires Raspberry Pi's OpenOCD fork for RP2350 —
-installed at `/usr/local/bin/openocd` from `~/raspberrypi-openocd`):
+Pico SDK 2.2.0 at `~/workspaces/pico-sdk`, this repo at
+`~/workspaces/pico-dirtyJtag`. Use one build directory per board: each caches its
+board.
 
 ```bash
-# Pico 2W (RP2350)
-sudo /usr/local/bin/openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg \
-  -c "adapter speed 5000; program ~/pico-dirtyJtag/build/dirtyJtag.elf verify reset exit"
+cd ~/workspaces/pico-dirtyJtag
 
-# Original Pico (RP2040) — system openocd works
-sudo openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
-  -c "adapter speed 5000; program ~/pico-dirtyJtag/build/dirtyJtag.elf verify reset exit"
+# Pico 2 W (the default)
+PICO_SDK_PATH=~/workspaces/pico-sdk cmake -S . -B build-pico2w -DPICO_BOARD=pico2_w
+make -C build-pico2w -j$(nproc)
+
+# RP2040-STAMP on the Colorlight base board
+PICO_SDK_PATH=~/workspaces/pico-sdk cmake -S . -B build-colorlight \
+  -DPICO_BOARD=solderparty_rp2040_stamp -DDJ_BOARD_TYPE=BOARD_COLORLIGHT_DB
+make -C build-colorlight -j$(nproc)
+
+# Pico on the QMTECH RP2040 daughterboard
+PICO_SDK_PATH=~/workspaces/pico-sdk cmake -S . -B build -DPICO_BOARD=pico -DDJ_BOARD_TYPE=BOARD_PICO
+make -C build -j$(nproc)
 ```
 
-Or via UF2: hold BOOTSEL, connect USB, copy `dirtyJtag.uf2` to the mounted drive.
+`cmake` is needed once per directory. After that, `make -C <dir>` alone rebuilds,
+re-running CMake itself when `CMakeLists.txt` changes. Output:
+`<dir>/dirtyJtag.elf` (for SWD) and `<dir>/dirtyJtag.uf2` (for BOOTSEL).
 
-The Pico enumerates as USB device `1209:c0ca` ("DirtyJTAG").
+Two scripts test the build:
+
+```bash
+./check_uf2_rule.sh build-pico2w        # make remakes a missing or stale UF2
+PICO_SDK_PATH=~/workspaces/pico-sdk ./check_board_config.sh
+                                        # board/pin-map pairs (in build-check/)
+```
+
+## Flash to the Pico
+
+**BOOTSEL** (no probe needed): hold BOOTSEL while plugging in USB, then
+
+```bash
+picotool load -v -x build-pico2w/dirtyJtag.uf2    # -x: run it afterwards
+```
+
+or copy the `.uf2` to the drive that appears. A Pico 2 W cannot run an RP2040
+UF2, which is why each pin map checks its chip.
+
+**SWD**, through a CMSIS-DAP probe. Name the probe with `adapter serial`: with more
+than one CMSIS-DAP device on the bus, OpenOCD takes the first it finds.
+
+```bash
+# Pico 2 W (RP2350): Raspberry Pi's OpenOCD fork, /usr/local/bin/openocd
+# (built from ~/workspaces/raspberrypi-openocd)
+/usr/local/bin/openocd -f interface/cmsis-dap.cfg -c "adapter serial <probe>" \
+  -f target/rp2350.cfg -c "adapter speed 5000" \
+  -c "program build-pico2w/dirtyJtag.elf verify reset exit"
+
+# RP2040 (stamp or Pico)
+/usr/local/bin/openocd -f interface/cmsis-dap.cfg -c "adapter serial <probe>" \
+  -f target/rp2040.cfg -c "adapter speed 5000" \
+  -c "program build-colorlight/dirtyJtag.elf verify reset exit"
+```
+
+Probes (2026-10-24): the pico-usb-debug-jtag carrier's J2 (`e66440a2`) is on the
+Wukong's Pico 2 W; the Raspberry Pi Debug Probe (`E6647C740343412F`) is on the
+carrier's J3. The JOP repo's `fpga/scripts/jtag_probe_map` has both serials
+(`ep4cgx150` is the carrier, `debugprobe` the Debug Probe).
 
 ## Install openFPGALoader
 
 ```bash
 sudo apt install openfpgaloader
 ```
+
+The JOP flow runs `/usr/local/bin/openFPGALoader`, a local build of v1.1.1 whose
+`--busdev-num` also works for dirtyJtag. With more than one dirtyJtag plugged in,
+pick one with it: `--busdev-num $(~/workspaces/jop-spinalhdl/fpga/scripts/jtag_probe_map --busdev wukong)`.
 
 ## Usage
 
@@ -196,19 +276,12 @@ sudo openFPGALoader -c dirtyJtag --verbose-level 2 --detect  # max debug
 
 The same Pico and wiring supports both pico-dirtyJtag (for openFPGALoader FPGA
 programming) and pico-fpga (for logic analyzer, UART bridge, JTAG scripting).
-
-```bash
-# Switch to dirtyJtag (FPGA programming) — Pico 2W
-sudo /usr/local/bin/openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg \
-  -c "adapter speed 5000; program ~/pico-dirtyJtag/build/dirtyJtag.elf verify reset exit"
-
-# Switch to pico-fpga (LA / UART / JTAG tool) — Pico 2W
-sudo /usr/local/bin/openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg \
-  -c "adapter speed 5000; program ~/pico-fpga/build/pico_fpga.elf verify reset exit"
-```
+Flash either one as above: `build-pico2w/dirtyJtag.elf` here, or
+`~/workspaces/pico-fpga/build/pico_fpga.elf` once pico-fpga is built.
 
 ## VM Note
 
 When running inside a VM (QEMU/KVM), the DirtyJTAG USB device (`1209:c0ca`) must
 be passed through to the guest after flashing. The pico-fpga device (`2e8a:000a`)
-uses a different VID:PID, so both need separate passthrough rules.
+and the BOOTSEL bootloaders (`2e8a:000f` RP2350, `2e8a:0003` RP2040) use other
+VID:PIDs, so each needs its own passthrough rule.
