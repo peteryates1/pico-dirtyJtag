@@ -19,16 +19,15 @@ Full list: `openFPGALoader --list-fpga`
 
 ## Boards
 
-The pin map (`DJ_BOARD_TYPE`, a block in `dirtyJtagConfig.h`) and the SDK board
-(`PICO_BOARD`) are chosen separately; both default to the Pico 2 W. The two pin
-maps we added refuse to compile for the wrong chip, with an `#error` naming the
-fix.
+[README.md](README.md#building-pico-dirtyjtag) has each board's build: its pin map
+(`DJ_BOARD_TYPE`), SDK board (`PICO_BOARD`) and build directory. Here they are
+wired to:
 
-| Board        | `DJ_BOARD_TYPE`           | `PICO_BOARD`               | Build directory    | Wired to                            |
-|--------------|---------------------------|----------------------------|--------------------|-------------------------------------|
-| Pico 2 W     | `BOARD_PICO2_W` (default) | `pico2_w` (default)        | `build-pico2w`     | QMTECH Wukong (XC7A100T) JTAG header |
-| RP2040-STAMP | `BOARD_COLORLIGHT_DB`     | `solderparty_rp2040_stamp` | `build-colorlight` | Colorlight i5 base board            |
-| Pico         | `BOARD_PICO`              | `pico`                     | `build`            | QMTECH RP2040 daughterboard         |
+| Board        | `DJ_BOARD_TYPE`           | Wired to                             |
+|--------------|---------------------------|--------------------------------------|
+| Pico 2 W     | `BOARD_PICO2_W` (default) | QMTECH Wukong (XC7A100T) JTAG header |
+| RP2040-STAMP | `BOARD_COLORLIGHT_DB`     | Colorlight i5 base board             |
+| Pico         | `BOARD_PICO`              | QMTECH RP2040 daughterboard          |
 
 ## Pin Assignments
 
@@ -154,38 +153,16 @@ Changes from upstream for compatibility with Pico SDK 2.2.0 and our wiring:
 
 ## Build
 
-Pico SDK 2.2.0 at `~/workspaces/pico-sdk`, this repo at
-`~/workspaces/pico-dirtyJtag`. Use one build directory per board: each caches its
-board.
+[README.md](README.md#building-pico-dirtyjtag) has each board's commands and the two
+test scripts. Here the Pico SDK 2.2.0 is at `~/workspaces/pico-sdk` and this repo at
+`~/workspaces/pico-dirtyJtag`, so run them after
 
 ```bash
 cd ~/workspaces/pico-dirtyJtag
-
-# Pico 2 W (the default)
-PICO_SDK_PATH=~/workspaces/pico-sdk cmake -S . -B build-pico2w -DPICO_BOARD=pico2_w
-make -C build-pico2w -j$(nproc)
-
-# RP2040-STAMP on the Colorlight base board
-PICO_SDK_PATH=~/workspaces/pico-sdk cmake -S . -B build-colorlight \
-  -DPICO_BOARD=solderparty_rp2040_stamp -DDJ_BOARD_TYPE=BOARD_COLORLIGHT_DB
-make -C build-colorlight -j$(nproc)
-
-# Pico on the QMTECH RP2040 daughterboard
-PICO_SDK_PATH=~/workspaces/pico-sdk cmake -S . -B build -DPICO_BOARD=pico -DDJ_BOARD_TYPE=BOARD_PICO
-make -C build -j$(nproc)
+export PICO_SDK_PATH=~/workspaces/pico-sdk
 ```
 
-`cmake` is needed once per directory. After that, `make -C <dir>` alone rebuilds,
-re-running CMake itself when `CMakeLists.txt` changes. Output:
-`<dir>/dirtyJtag.elf` (for SWD) and `<dir>/dirtyJtag.uf2` (for BOOTSEL).
-
-Two scripts test the build:
-
-```bash
-./check_uf2_rule.sh build-pico2w        # make remakes a missing or stale UF2
-PICO_SDK_PATH=~/workspaces/pico-sdk ./check_board_config.sh
-                                        # board/pin-map pairs (in build-check/)
-```
+`make -C <dir>` re-runs CMake itself when `CMakeLists.txt` changes.
 
 ## Flash to the Pico
 
@@ -215,9 +192,10 @@ than one CMSIS-DAP device on the bus, OpenOCD takes the first it finds.
 ```
 
 Probes (2026-10-24): the pico-usb-debug-jtag carrier's J2 (`e66440a2`) is on the
-Wukong's Pico 2 W; the Raspberry Pi Debug Probe (`E6647C740343412F`) is on the
-carrier's J3. The JOP repo's `fpga/scripts/jtag_probe_map` has both serials
-(`ep4cgx150` is the carrier, `debugprobe` the Debug Probe).
+Wukong's Pico 2 W; the Raspberry Pi Debug Probe (`E6647C740343412F`) moved that day
+from the carrier's J3 to the spare Pico `e6616408`. The JOP repo's
+`fpga/scripts/jtag_probe_map` has both probes' serials (`ep4cgx150` is the carrier,
+`debugprobe` the Debug Probe).
 
 ## Install openFPGALoader
 

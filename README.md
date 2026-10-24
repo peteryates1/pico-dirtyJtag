@@ -6,6 +6,12 @@ An additional feature provides a bridge to an external UART.  This is often usef
 
 ## Pinout
 
+This fork builds three boards, each with its own pin map: [Building](#building-pico-dirtyjtag)
+lists them, and [LOCAL_SETUP.md](LOCAL_SETUP.md#pin-assignments) has their pins. The default is a
+Pico 2 W, with TCK, TDO, TDI and TMS on GP0-3. The picture and table below are upstream's Pico
+map; this fork's `BOARD_PICO` keeps its JTAG pins but moves the first UART (DBG TX/RX) to
+GP0/GP1.
+
 ![Pinout image](doc/detailed_pinout.png)
 
 
@@ -25,15 +31,14 @@ An additional feature provides a bridge to an external UART.  This is often usef
 
 Other configurations and RP2040 boards are supported.  
 
-In `dirtyJtagConfig.h`, select the board you want to use, or define a new one.
+Pick the board when you configure, with `-DDJ_BOARD_TYPE=<name>` (see
+[Building](#building-pico-dirtyjtag)), or define a new one in `dirtyJtagConfig.h`. Without
+`-DDJ_BOARD_TYPE`, the header's default applies:
 
 ``` C
-#define BOARD_TYPE BOARD_PICO
-//#define BOARD_TYPE BOARD_ADAFRUIT_ITSY
-//#define BOARD_TYPE BOARD_SPOKE_RP2040
-//#define BOARD_TYPE BOARD_WERKZEUG
-//#define BOARD_TYPE BOARD_QMTECH_RP2040_DAUGHTERBOARD
-//#define BOARD_TYPE BOARD_RP2040_ZERO
+#ifndef BOARD_TYPE
+#define BOARD_TYPE BOARD_PICO2_W
+#endif
 ```
 
 The following values control where the code expects to find functionality.  Of course, not all pins can can be used for all functions.  Take care, especially with the UART pins, to ensure compatibility.
@@ -73,20 +78,51 @@ See the `dirtyJtagConfig.h` file for these and other configuration options.
 
 ## Building pico-dirtyJtag
 
-Follow [the instructions](https://github.com/raspberrypi/pico-sdk) for installing the official Raspberry Pi Pico SDK, then clone this repository and use the following commands:
+Follow [the instructions](https://github.com/raspberrypi/pico-sdk) for installing the official Raspberry Pi Pico SDK (this fork is built with 2.2.0), point `PICO_SDK_PATH` at it, then clone this repository.
 
+A build takes two choices: the pin map (`DJ_BOARD_TYPE`, a block in `dirtyJtagConfig.h`) and the
+SDK board (`PICO_BOARD`), which sets the chip. This fork builds three boards:
+
+| Board                                     | `DJ_BOARD_TYPE`       | `PICO_BOARD`               | Build directory    |
+|-------------------------------------------|-----------------------|----------------------------|--------------------|
+| Pico 2 W (the default)                    | `BOARD_PICO2_W`       | `pico2_w`                  | `build-pico2w`     |
+| RP2040-STAMP on the Colorlight base board | `BOARD_COLORLIGHT_DB` | `solderparty_rp2040_stamp` | `build-colorlight` |
+| Pico on the QMTECH RP2040 daughterboard   | `BOARD_PICO`          | `pico`                     | `build`            |
+
+A build directory keeps the board it was first configured with, so give each board its own:
+
+```bash
+export PICO_SDK_PATH=/path/to/pico-sdk
+
+# Pico 2 W (the default)
+cmake -S . -B build-pico2w -DPICO_BOARD=pico2_w
+make -C build-pico2w -j$(nproc)
+
+# RP2040-STAMP on the Colorlight base board
+cmake -S . -B build-colorlight -DPICO_BOARD=solderparty_rp2040_stamp -DDJ_BOARD_TYPE=BOARD_COLORLIGHT_DB
+make -C build-colorlight -j$(nproc)
+
+# Pico on the QMTECH RP2040 daughterboard
+cmake -S . -B build -DPICO_BOARD=pico -DDJ_BOARD_TYPE=BOARD_PICO
+make -C build -j$(nproc)
 ```
-mkdir -p build
-cd build
-cmake ..
-make
-```
 
-If everything succeeds you should have a `dirtyJtag.uf2` file that you can directly upload to the Pi Pico.
+If everything succeeds, each directory holds a `dirtyJtag.uf2` that you can directly upload to the
+Pico (BOOTSEL), and a `dirtyJtag.elf` for an SWD probe. After the first `cmake`, `make -C <dir>`
+alone rebuilds, and remakes a missing or stale UF2.
 
-In this fork the default board is the Pico 2 W. A build directory keeps the board it was first
-configured for, so use one directory per board: [LOCAL_SETUP.md](LOCAL_SETUP.md) has each board's
-`cmake` line and how to flash it.
+- The two pin maps this fork added check their chip: built for the wrong `PICO_BOARD`, they stop
+  with an `#error` that names the fix.
+- Upstream's other pin maps are still in `dirtyJtagConfig.h` (`BOARD_ADAFRUIT_ITSY`,
+  `BOARD_SPOKE_RP2040`, `BOARD_WERKZEUG`, `BOARD_QMTECH_RP2040_DAUGHTERBOARD`,
+  `BOARD_RP2040_ZERO`) and build the same way, with their own `-DDJ_BOARD_TYPE`. All five built
+  with `-DPICO_BOARD=pico` (2026-10-24), but this fork has not run them.
+- Two scripts test the build: `./check_uf2_rule.sh build-pico2w` checks that `make` remakes a
+  missing or stale UF2, and `./check_board_config.sh` (with `PICO_SDK_PATH` set) checks each of
+  our boards' pin map against its chip, in `build-check/`.
+
+[LOCAL_SETUP.md](LOCAL_SETUP.md) has each board's pins, the USB interfaces, and how this setup
+flashes and uses them.
 
 ## JTAG Usage
 
