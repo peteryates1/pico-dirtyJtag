@@ -196,14 +196,14 @@
 
 #elif ( BOARD_TYPE == BOARD_PICO2_W )
 
-// Pico 2W (RP2350W) wired to the QMTech Wukong JTAG header: TCK/TDO/TMS/TDI =
+// Pico 2W (RP2350W) wired to the QMTech Wukong JTAG header: TCK/TDO/TDI/TMS =
 // GP0..3 (single-pin PIO, no adjacency constraint). RST/TRST left on GP20/21
 // (unconnected). The LED is on CYW43 WL_GPIO0, not a regular GPIO, so LED pins
 // are disabled (this also keeps us off GP25 = WL_CS).
-#define PIN_TDI 3
+#define PIN_TDI 2
 #define PIN_TDO 1
 #define PIN_TCK 0
-#define PIN_TMS 2
+#define PIN_TMS 3
 #define PIN_RST 20
 #define PIN_TRST 21
 
