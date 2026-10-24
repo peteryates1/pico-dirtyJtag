@@ -103,5 +103,25 @@ target_link_libraries(dirtyJtag PRIVATE
 	pico_multicore
 )
 
+# The UF2 gets a rule of its own. pico-sdk makes it as a POST_BUILD step of
+# the link, which a Makefile build does not track: a UF2 missing beside an
+# up-to-date ELF was never made again, and make said nothing (2026-10-23).
+# Same command and arguments as pico_add_uf2_output() in pico-sdk 2.2.0.
+# Test: check_uf2_rule.sh
+set(PICO_NO_UF2 1)
 pico_add_extra_outputs(dirtyJtag)
+
+pico_init_picotool()
+if (picotool_FOUND)
+    set(DJ_UF2_ARGS --family ${PICO_PLATFORM})
+    if (PICO_RP2350_A2_SUPPORTED)
+        list(APPEND DJ_UF2_ARGS --abs-block)   # RP2350-E10
+    endif()
+    add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/dirtyJtag.uf2
+        COMMAND picotool uf2 convert --quiet $<TARGET_FILE:dirtyJtag>
+                ${CMAKE_CURRENT_BINARY_DIR}/dirtyJtag.uf2 ${DJ_UF2_ARGS}
+        DEPENDS dirtyJtag
+        VERBATIM)
+    add_custom_target(dirtyJtag_uf2 ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/dirtyJtag.uf2)
+endif()
 
