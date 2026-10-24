@@ -200,6 +200,9 @@
 // GP0..3 (single-pin PIO, no adjacency constraint). RST/TRST left on GP20/21
 // (unconnected). The LED is on CYW43 WL_GPIO0, not a regular GPIO, so LED pins
 // are disabled (this also keeps us off GP25 = WL_CS).
+#if !PICO_RP2350
+#error "BOARD_PICO2_W is a Pico 2 W (RP2350): configure with -DPICO_BOARD=pico2_w, or pick another board with -DDJ_BOARD_TYPE"
+#endif
 #define PIN_TDI 2
 #define PIN_TDO 1
 #define PIN_TCK 0
@@ -228,6 +231,9 @@
 // RP2040 GPIO used here goes straight to an FPGA ball, so RST/TRST are NOT
 // defined (never drive a pin the FPGA may also drive).
 // The stamp's only LED is a WS2812 on GPIO21 -> LEDs disabled.
+#if !PICO_RP2040
+#error "BOARD_COLORLIGHT_DB is an RP2040-STAMP: configure with -DPICO_BOARD=solderparty_rp2040_stamp"
+#endif
 #define PIN_TCK 0
 #define PIN_TMS 1
 #define PIN_TDI 2

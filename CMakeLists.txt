@@ -37,7 +37,9 @@ if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-set(PICO_BOARD pico CACHE STRING "Board type")
+# pico2_w to match dirtyJtagConfig.h's default BOARD_TYPE (BOARD_PICO2_W);
+# each board's pin map checks its chip (test: check_board_config.sh)
+set(PICO_BOARD pico2_w CACHE STRING "Board type")
 
 # Generated Cmake Pico project file
 
